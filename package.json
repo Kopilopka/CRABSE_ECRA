@@ -2,7 +2,7 @@
   "name": "generating-reporting-documentation",
   "author": "Ivan Bashmakov",
   "version": "0.0.1",
-  "private": true,
+  "private": false,
   "scripts": {
     "serve": "vite preview",
     "build": "vite build",
@@ -14,9 +14,11 @@
   "dependencies": {
     "@mdi/font": "5.9.55",
     "pinia": "^2.1.7",
+    "primevue": "^3.52.0",
     "roboto-fontface": "*",
+    "v-contextmenu": "^3.0.0",
     "vue": "^3.4.21",
-    "vuetify": "npm:@vuetify/nightly@next",
+    "vuetify": "3.5.9",
     "webfontloader": "^1.0.0"
   },
   "devDependencies": {
@@ -26,7 +28,7 @@
     "eslint": "^8.57.0",
     "eslint-plugin-vue": "^9.23.0",
     "prettier": "^3.2.5",
-    "vite": "^5.2.10",
+    "vite": "^5.2.8",
     "vite-plugin-vuetify": "^1.0.0-alpha.12",
     "vue-cli-plugin-vuetify": "~2.5.8"
   },
