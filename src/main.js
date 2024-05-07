@@ -7,6 +7,7 @@ import 'v-contextmenu/dist/themes/default.css'
 import PrimeVue from 'primevue/config'
 import 'primevue/resources/themes/md-light-indigo/theme.css'
 import './assets/main.css'
+import VueExcelEditor from 'vue3-excel-editor'
 
 loadFonts()
 
@@ -22,4 +23,5 @@ createApp(App)
       tooltip: 1100 //tooltip
     }
   })
+  .use(VueExcelEditor)
   .mount('#app')

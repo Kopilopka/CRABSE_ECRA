@@ -69,7 +69,7 @@
 
             <div class="flex gap-4">
               <v-btn color="#eee" size="small" variant="flat" @click="() => {}"> Загрузить </v-btn>
-              <v-btn color="#eee" size="small" variant="flat" disabled @click="() => {}">
+              <v-btn color="#eee" size="small" variant="flat" @click="isExelTableOpen = true">
                 Редактировать
               </v-btn>
             </div>
@@ -234,6 +234,41 @@
         </template>
       </v-card>
     </v-dialog>
+
+    <v-dialog v-model="isExelTableOpen" width="auto" class="exel-modal">
+      <v-card :title="currentElement.label">
+        <vue-excel-editor v-model="exelTableData">
+          <vue-excel-column
+            v-for="(column, i) in new Array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K')"
+            :key="i"
+            :label="column"
+            type="string"
+            width="80px"
+          />
+        </vue-excel-editor>
+
+        <template v-slot:actions>
+          <div class="flex gap-2">
+            <v-btn
+              text="Ok"
+              size="small"
+              color="#eee"
+              variant="flat"
+              class="w-[100px]"
+              @click="isExelTableOpen = false"
+            ></v-btn>
+            <v-btn
+              text="Отмена"
+              size="small"
+              color="#eee"
+              variant="flat"
+              class="w-[100px]"
+              @click="isExelTableOpen = false"
+            ></v-btn>
+          </div>
+        </template>
+      </v-card>
+    </v-dialog>
   </v-layout>
 </template>
 
@@ -259,6 +294,8 @@ export default {
 
   data() {
     return {
+      exelTableData: [],
+      isExelTableOpen: false,
       expandedKeys: {},
       isModalWindowOpen: false,
       averagingIntervalTypes: {
@@ -298,67 +335,6 @@ export default {
 
             this.active = ['reportForm-level-' + Math.random().toString(16).slice(2)]
             this.selectedKey = { [this.active[0]]: true }
-
-            // TODO: comment before build
-            // for testing
-            // this.nodes = [
-            //   {
-            //     id: 'reportForm-level-6480c434c16c3',
-            //     key: 'reportForm-level-6480c434c16c3',
-            //     label: 'Форма отчета1',
-            //     contextMenu: true,
-            //     level: 'reportForm',
-            //     children: [
-            //       {
-            //         id: 'List-9303b5db0aa99',
-            //         key: 'List-9303b5db0aa99',
-            //         label: 'Лист1',
-            //         level: 'list',
-            //         children: [
-            //           {
-            //             id: 'TagTable-95ad1cc45c2d9',
-            //             contextMenu: true,
-            //             label: 'TagTable1',
-            //             averagingInterval: 30,
-            //             averagingIntervalType: 'сек',
-            //             isConsiderInvalidValues: false,
-            //             level: 'tagTable',
-            //             key: 'TagTable-95ad1cc45c2d9',
-            //             children: [
-            //               {
-            //                 id: 'AVG-501610ad71758',
-            //                 label: 'col1: AVG()',
-            //                 appendLabelText: ': AVG()',
-            //                 level: 'AVG',
-            //                 averagingInterval: 30,
-            //                 averagingIntervalType: 'сек',
-            //                 isConsiderInvalidValues: false,
-            //                 numberOfDecimalPlaces: 3,
-            //                 averagValue: 'среднее значение',
-            //                 key: 'AVG-501610ad71758'
-            //               },
-            //               {
-            //                 appendLabelText: ': время',
-            //                 id: 'Time-a46464ff8be27',
-            //                 key: 'Time-a46464ff8be27',
-            //                 label: 'col2: время',
-            //                 level: 'Time'
-            //               }
-            //             ]
-            //           },
-            //           {
-            //             id: 'Text-596dc8ed7ca69',
-            //             key: 'Text-596dc8ed7ca69',
-            //             label: 'Text2',
-            //             level: 'Text',
-            //             role: 'Период отчета',
-            //             contextMenu: true
-            //           }
-            //         ]
-            //       }
-            //     ]
-            //   }
-            // ]
 
             // TODO: return befor build
             this.nodes.push({
@@ -550,7 +526,70 @@ export default {
     }
   },
 
-  mounted() {},
+  mounted() {
+    this.exelTableData = new Array(17).fill({})
+
+    // TODO: comment before build
+    // for testing
+    // this.nodes = [
+    //   {
+    //     id: 'reportForm-level-6480c434c16c3',
+    //     key: 'reportForm-level-6480c434c16c3',
+    //     label: 'Форма отчета1',
+    //     contextMenu: true,
+    //     level: 'reportForm',
+    //     children: [
+    //       {
+    //         id: 'List-9303b5db0aa99',
+    //         key: 'List-9303b5db0aa99',
+    //         label: 'Лист1',
+    //         level: 'list',
+    //         children: [
+    //           {
+    //             id: 'TagTable-95ad1cc45c2d9',
+    //             contextMenu: true,
+    //             label: 'TagTable1',
+    //             averagingInterval: 30,
+    //             averagingIntervalType: 'сек',
+    //             isConsiderInvalidValues: false,
+    //             level: 'tagTable',
+    //             key: 'TagTable-95ad1cc45c2d9',
+    //             children: [
+    //               {
+    //                 id: 'AVG-501610ad71758',
+    //                 label: 'col1: AVG()',
+    //                 appendLabelText: ': AVG()',
+    //                 level: 'AVG',
+    //                 averagingInterval: 30,
+    //                 averagingIntervalType: 'сек',
+    //                 isConsiderInvalidValues: false,
+    //                 numberOfDecimalPlaces: 3,
+    //                 averagValue: 'среднее значение',
+    //                 key: 'AVG-501610ad71758'
+    //               },
+    //               {
+    //                 appendLabelText: ': время',
+    //                 id: 'Time-a46464ff8be27',
+    //                 key: 'Time-a46464ff8be27',
+    //                 label: 'col2: время',
+    //                 level: 'Time'
+    //               }
+    //             ]
+    //           },
+    //           {
+    //             id: 'Text-596dc8ed7ca69',
+    //             key: 'Text-596dc8ed7ca69',
+    //             label: 'Text2',
+    //             level: 'Text',
+    //             role: 'Период отчета',
+    //             contextMenu: true
+    //           }
+    //         ]
+    //       }
+    //     ]
+    //   }
+    // ]
+  },
 
   watch: {
     active(val) {
@@ -703,5 +742,11 @@ export default {
   width: 100%;
   display: flex;
   justify-content: center;
+  z-index: 9999;
+}
+
+.exel-modal .v-card-actions {
+  margin-bottom: -52px;
+  justify-content: flex-end;
 }
 </style>
