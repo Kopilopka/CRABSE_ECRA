@@ -1,62 +1,27 @@
 <template>
   <v-layout class="rounded rounded-md">
-    <v-navigation-drawer :width="350">
-      <div class="navigation" @contextmenu="showMainContextMenu">
-        <v-text-field label="Найти"></v-text-field>
+    <!-- -------------------------  панель управления    ----------------------------- -->
+    <ControlPanel
+      :menuNodes="nodes"
+      :selectedKey="selectedKey"
+      @openMainContextMenu="showMainContextMenu"
+      @openTreeContextMenu="(event, node) => showContextMenu(event, node)"
+      @nodeSelect="onNodeSelect"
+      @nodeUnselect="onNodeUnselect"
+      @changeSelectionKeys="changeSelectionKeys"
+    />
 
-        <div v-if="nodes.length" class="report-forms-menu">
-          <Tree
-            v-model:selectionKeys="selectedKey"
-            :value="nodes"
-            selectionMode="single"
-            @nodeSelect="onNodeSelect"
-            @nodeUnselect="onNodeUnselect"
-          >
-            <template #default="{ node }">
-              <div @contextmenu="showContextMenu($event, node)" class="custom-full">
-                <p style="margin-left: 5px">{{ node.label }}</p>
-              </div>
-            </template>
-          </Tree>
-        </div>
-        <p v-else>
-          Для добавления новых форм отчета и дальнейшего их редактироваия, воспользуйтесь
-          контекстным меню
-        </p>
-      </div>
-    </v-navigation-drawer>
+    <!-- -------------------------  хэдер  ----------------------------- -->
+    <AppHeader :active="active" @saveForm="saveForm()" />
 
-    <v-app-bar>
-      <div class="pa-4">
-        <div class="flex gap-4">
-          <v-btn
-            color="#eee"
-            size="small"
-            variant="flat"
-            :disabled="!active.length"
-            @click="saveForms()"
-          >
-            Сохранить
-          </v-btn>
-          <v-btn
-            color="#eee"
-            size="small"
-            variant="flat"
-            :disabled="!active.length"
-            @click="() => {}"
-          >
-            Отменить
-          </v-btn>
-        </div>
-      </div>
-    </v-app-bar>
-
+    <!-- ---------------------  панель описания и настройки  ------------------------ -->
     <v-main>
       <v-card v-if="active.length === 0" max-width="400" flat>
         <h3>Выберите элемент дерева отчетов</h3>
       </v-card>
 
       <v-card v-else max-width="400" flat>
+        <!-- -----------  панель описания и настройки для "формы отчёта пользователя (рис. 2)"  ----------- -->
         <div v-if="selected?.level === 'reportForm'" class="report-forms-container">
           <div>
             <h3>Название формы отчета</h3>
@@ -76,6 +41,7 @@
           </div>
         </div>
 
+        <!-- -----------  панель описания и настройки для "для объекта листа (рис. 3)"  ----------- -->
         <div v-if="selected?.level === 'list'" class="report-forms-container">
           <div>
             <h3>Название листа</h3>
@@ -84,6 +50,7 @@
           </div>
         </div>
 
+        <!-- -----------  панель описания и настройки для "для таблицы измерений (рис. 4)"  ----------- -->
         <div v-if="selected?.level === 'tagTable'" class="flex flex-col gap-6">
           <div>
             <h3 class="font-bold">Таблица измерений</h3>
@@ -122,6 +89,7 @@
           </div>
         </div>
 
+        <!-- -----------  панель описания и настройки для "для колонки значения сигнала (рис. 6)"  ----------- -->
         <div v-if="selected?.level === 'AVG'">
           <div class="flex gap-2">
             <h3 class="font-bold">Идентификатор колонки</h3>
@@ -175,6 +143,7 @@
           </div>
         </div>
 
+        <!-- -----------  панель описания и настройки для "для текстового поля (рис. 8)"  ----------- -->
         <div v-if="selected?.level === 'Text'">
           <div class="flex flex-col gap-2">
             <h3 class="font-bold">Название поля</h3>
@@ -196,12 +165,15 @@
       </v-card>
     </v-main>
 
+    <!-- ---------------------  контекстное меню  ------------------------ -->
+
     <ContextMenu ref="MainContextMenu" :model="MainContextMenu" />
     <ContextMenu ref="ReportFormContextMenu" :model="ReportFormContextMenu" />
     <ContextMenu ref="ListContextMenu" :model="ListContextMenu" />
     <ContextMenu ref="TagTableContextMenu" :model="TagTableContextMenu" />
 
-    <v-dialog v-model="isModalWindowOpen" width="auto">
+    <!-- ------- Рисунок 7. Панель назначения сигнала для колонки таблицы измерений --------- -->
+    <v-dialog v-model="isSignalAssignmentPanelOpen" width="auto">
       <v-card max-width="600" max-height="600" title="Назначение параметра">
         <Tree
           v-model:expandedKeys="expandedKeys"
@@ -220,7 +192,7 @@
               variant="flat"
               text="Ok"
               class="w-[125px]"
-              @click="saveForms()"
+              @click="saveForm()"
             ></v-btn>
             <v-btn
               color="red"
@@ -228,13 +200,14 @@
               variant="flat"
               text="Отмена"
               class="w-[125px]"
-              @click="isModalWindowOpen = false"
+              @click="isSignalAssignmentPanelOpen = false"
             ></v-btn>
           </div>
         </template>
       </v-card>
     </v-dialog>
 
+    <!-- ------- Рисунок 9. Редактор внешнего вида отчёта (настройка макета отчёта. Панель по кнопке "Редактировать" из рис. 2) --------- -->
     <v-dialog v-model="isExelTableOpen" width="auto" class="exel-modal">
       <v-card :title="currentElement.label">
         <vue-excel-editor v-model="exelTableData">
@@ -275,6 +248,8 @@
 <script>
 import ContextMenu from 'primevue/contextmenu'
 import Tree from 'primevue/tree'
+import ControlPanel from '@/components/ControlPanel.vue'
+import AppHeader from '@/components/Header.vue'
 
 import {
   removeElementById,
@@ -288,6 +263,8 @@ export default {
   name: 'App',
 
   components: {
+    AppHeader,
+    ControlPanel,
     Tree,
     ContextMenu
   },
@@ -297,7 +274,7 @@ export default {
       exelTableData: [],
       isExelTableOpen: false,
       expandedKeys: {},
-      isModalWindowOpen: false,
+      isSignalAssignmentPanelOpen: false,
       averagingIntervalTypes: {
         сек: {
           min: 0,
@@ -527,10 +504,10 @@ export default {
   },
 
   mounted() {
-    this.exelTableData = new Array(17).fill({})
+    this.exelTableData = new Array(17).fill({}) // создаем дефолтные данные для таблицы "формы отчета"
 
     // TODO: comment before build
-    // for testing
+    // ноды для тестирования дерева "панели управления"
     // this.nodes = [
     //   {
     //     id: 'reportForm-level-6480c434c16c3',
@@ -593,6 +570,7 @@ export default {
 
   watch: {
     active(val) {
+      // меняем значение текущего обьекта по смене ключей из this.active
       if (val.length && this.selected) {
         this.currentElement = JSON.parse(JSON.stringify(this.selected))
       }
@@ -600,10 +578,12 @@ export default {
   },
 
   computed: {
+    // ноды для "Панели назначения сигнала для колонки таблицы измерений"
     equipmentSignalNodes() {
       return CONSTANTS.EQUIPMENT_SIGNAL_NODES
     },
 
+    // выбранный обьект
     selected() {
       if (!this.active.length) return undefined
 
@@ -620,6 +600,10 @@ export default {
   },
 
   methods: {
+    changeSelectionKeys(data) {
+      this.selectedKey = data
+    },
+
     onNodeSelect(node) {
       console.log('onNodeSelect', node)
       this.active = [node.id]
@@ -643,8 +627,8 @@ export default {
       console.log('onEquipmentSignalNodesUnselect', node)
     },
 
-    saveForms() {
-      console.log('saveForms')
+    saveForm() {
+      console.log('saveForm')
 
       if (this.currentElement?.id) {
         this.nodes = updateElementById({
@@ -654,7 +638,7 @@ export default {
         })
       }
 
-      this.isModalWindowOpen = false
+      this.isSignalAssignmentPanelOpen = false
     },
 
     showMainContextMenu(event) {
@@ -665,11 +649,12 @@ export default {
       console.log('event', event)
       console.log('showContextMenu', node)
 
-      event.stopPropagation()
-      event.preventDefault()
+      event.stopPropagation() // не даем событию распростронятся на родительскую ноду
+      event.preventDefault() // останавливаем стандартное поведение элемента
 
       this.selectedId = node.id
 
+      // показываем нужное контекстное меню в зависимости от уровня элемента дерева из "панели управления"
       switch (node.level) {
         case 'list':
           this.$refs.ListContextMenu.show(event)
@@ -685,7 +670,7 @@ export default {
 
     assignParameter() {
       console.log('assignParameter', this.currentElement)
-      this.isModalWindowOpen = true
+      this.isSignalAssignmentPanelOpen = true
       this.expandedKeys[this.equipmentSignalNodes[0].key] = true
     }
   }
@@ -693,27 +678,6 @@ export default {
 </script>
 
 <style>
-.navigation {
-  padding: 10px 25px;
-  display: grid;
-  grid-template-rows: max-content 1fr;
-  height: 100vh;
-}
-
-.p-contextmenu .p-contextmenu-root-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 5px;
-}
-
-.p-contextmenu .p-submenu-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 5px;
-}
-
 .p-treenode-children {
   margin-left: 12px;
 }
