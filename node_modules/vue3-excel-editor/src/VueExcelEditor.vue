@@ -2415,6 +2415,7 @@ export default defineComponent({
     },
     inputBoxBlur () {
       if (!this.$refs.dpContainer) return
+      this.$emit('cell-blur', {rowPos: this.currentRowPos, colPos: this.currentColPos})
       if (this.$refs.dpContainer.querySelector(':hover')) return
       this.inputBoxComplete()
       this.focused = false

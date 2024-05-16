@@ -41,35 +41,6 @@ export function getElementById({ array, targetId }) {
   }, null)
 }
 
-// const data = [
-//   {
-//     id: '0',
-//     children: [
-//       {
-//         id: '0.0',
-//         children: [
-//           {
-//             id: '0.0.0',
-//             children: [
-//               {
-//                 id: '0.0.0.0',
-//                 children: [
-//                   { id: '0.0.0.0.0', name: 'TEST' },
-//                   { id: '0.0.0.0.1', name: 'children' }
-//                 ]
-//               },
-//               { id: '0.0.0.1' }
-//             ]
-//           },
-//           { id: '0.0.1' },
-//           { id: '0.0.2' }
-//         ]
-//       },
-//       { id: '0.1' }
-//     ]
-//   },
-//   { id: '1' }
-// ]
 export function addNewChildToElementById({ array, targetId, newChild }) {
   return array.reduce((acc, item) => {
     if (item.id === targetId) {
@@ -142,4 +113,39 @@ export function updateElementById({ array, targetId, newData }) {
     acc.push(item)
     return acc
   }, [])
+}
+
+export function getFormatedDate(timeShift) {
+  let today = new Date()
+
+  if (timeShift) {
+    today.setDate(today.getDate() - timeShift)
+  }
+
+  const yyyy = today.getFullYear()
+  let mm = today.getMonth() + 1 // Months start at 0!
+  let dd = today.getDate()
+
+  if (dd < 10) dd = '0' + dd
+  if (mm < 10) mm = '0' + mm
+
+  return dd + '.' + mm + '.' + yyyy
+}
+export function getCurrentTime() {
+  const currentDate = new Date()
+
+  return currentDate.toTimeString().split(' ')[0]
+}
+
+export function getRandomNumber(min, max) {
+  return Math.random() * (max - min) + min
+}
+
+export function convertDigitToLetter(number) {
+  let result = ''
+  do {
+    result = ((number % 26) + 10).toString(36) + result
+    number = Math.floor(number / 26) - 1
+  } while (number >= 0)
+  return result.toUpperCase()
 }

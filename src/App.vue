@@ -30,11 +30,31 @@
           </div>
 
           <div class="flex flex-col gap-4">
-            <h4>Макет формы отчета <span style="color: red">не загружен</span></h4>
+            <h4>
+              Макет формы отчета
+              <span v-if="currentElement.isReportFormDownloaded && !loading" style="color: green"
+                >загружен</span
+              >
+              <span v-else style="color: red">не загружен</span>
+            </h4>
 
             <div class="flex gap-4">
-              <v-btn color="#eee" size="small" variant="flat" @click="() => {}"> Загрузить </v-btn>
-              <v-btn color="#eee" size="small" variant="flat" @click="isExelTableOpen = true">
+              <v-btn
+                color="#eee"
+                size="small"
+                variant="flat"
+                :loading="loading"
+                @click="downloadReportForm()"
+              >
+                Загрузить
+              </v-btn>
+              <v-btn
+                color="#eee"
+                size="small"
+                variant="flat"
+                :disabled="currentElement.isReportFormDownloaded === false"
+                @click="isExelTableOpen = true"
+              >
                 Редактировать
               </v-btn>
             </div>
@@ -207,16 +227,85 @@
       </v-card>
     </v-dialog>
 
+    <!-- ------- Рисунок 10. Выбор таблицы или значений отображения отчёта --------- -->
+    <v-dialog
+      v-model="selectingTableDisplayValues"
+      width="auto"
+      class="signalAssignmentPanel-modal"
+    >
+      <v-card max-width="600" max-height="600" min-height="400">
+        <v-card-title>
+          <v-text-field label="Найти"></v-text-field>
+        </v-card-title>
+
+        <Tree
+          v-model:expandedKeys="selectingTableDisplayValuesExpandedKeys"
+          v-model:selectionKeys="signalAssignmentPanelSelectedKey"
+          :value="nodes"
+          selectionMode="single"
+          class="w-full md:w-[30rem]"
+          @nodeSelect="selectFromSelectingTableDisplayValues"
+          @nodeUnselect="unselectSelectedEntity"
+        ></Tree>
+
+        <template v-slot:actions>
+          <div class="flex gap-6">
+            <v-btn
+              color="green"
+              size="small"
+              variant="flat"
+              text="Ok"
+              class="w-[125px]"
+              @click="setExcelTableData"
+            ></v-btn>
+            <v-btn
+              color="red"
+              size="small"
+              variant="flat"
+              text="Отмена"
+              class="w-[125px]"
+              @click="selectingTableDisplayValues = false"
+            ></v-btn>
+          </div>
+        </template>
+      </v-card>
+    </v-dialog>
+
     <!-- ------- Рисунок 9. Редактор внешнего вида отчёта (настройка макета отчёта. Панель по кнопке "Редактировать" из рис. 2) --------- -->
     <v-dialog v-model="isExelTableOpen" width="auto" class="exel-modal">
       <v-card :title="currentElement.label">
-        <vue-excel-editor v-model="exelTableData">
+        <template v-slot:prepend>
+          <div class="flex gap-4 pa-4">
+            <v-btn
+              color="#eee"
+              variant="flat"
+              class="w-[100px]"
+              :disabled="!isFocused"
+              @click="showReportFormTree()"
+            >
+              <v-icon color="success" size="x-large" icon="mdi-plus"></v-icon>
+            </v-btn>
+
+            <v-btn color="#eee" variant="flat" class="w-[100px]" @click="saveExcelTable()">
+              <v-icon color="success" size="x-large" icon="mdi-check"></v-icon>
+            </v-btn>
+          </div>
+        </template>
+
+        <vue-excel-editor
+          v-model="currentElement.excelTableData"
+          width="1200px"
+          @cell-focus="cellFocus"
+          @cell-blur="cellBlur"
+        >
           <vue-excel-column
-            v-for="(column, i) in new Array('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K')"
+            v-for="(columnLetter, i) in columnLetters"
             :key="i"
-            :label="column"
+            :label="columnLetter"
+            :field="'column' + columnLetter"
+            text-align="right"
             type="string"
-            width="80px"
+            :width="computedColumnWIdth(columnLetter)"
           />
         </vue-excel-editor>
 
@@ -228,7 +317,7 @@
               color="#eee"
               variant="flat"
               class="w-[100px]"
-              @click="isExelTableOpen = false"
+              @click="saveExcelTable()"
             ></v-btn>
             <v-btn
               text="Отмена"
@@ -255,9 +344,16 @@ import {
   removeElementById,
   addNewChildToElementById,
   getElementById,
-  updateElementById
+  updateElementById,
+  getFormatedDate,
+  getCurrentTime,
+  getRandomNumber,
+  convertDigitToLetter
 } from '@/utils/helper.js'
 import CONSTANTS from '@/utils/constants.js'
+
+const currentDate = getFormatedDate()
+const dateShift = getFormatedDate(3) // 3 days ago
 
 export default {
   name: 'App',
@@ -271,9 +367,18 @@ export default {
 
   data() {
     return {
-      exelTableData: [],
+      signalAssignmentPanelSelectedKey: {},
+      columnLetters: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'],
+      selectedEntity: null,
+      selectingTableDisplayValues: false,
+      loading: false,
+      lastFocusedCellId: null,
+      lastFocusedСolumnName: null,
+      lastFocusedRowIndex: null,
+      isFocused: false,
       isExelTableOpen: false,
       expandedKeys: {},
+      selectingTableDisplayValuesExpandedKeys: {},
       isSignalAssignmentPanelOpen: false,
       averagingIntervalTypes: {
         сек: {
@@ -313,13 +418,62 @@ export default {
             this.active = ['reportForm-level-' + Math.random().toString(16).slice(2)]
             this.selectedKey = { [this.active[0]]: true }
 
-            // TODO: return befor build
+            function initExcelTableData() {
+              const defaultData = [
+                {
+                  columnA: 'Дата формирования:'
+                },
+                {
+                  columnA: currentDate
+                },
+                {
+                  columnA: getCurrentTime()
+                },
+                {
+                  columnA: 'Интервал дат:',
+                  columnB: dateShift + ' 00:00:00',
+                  columnC: currentDate + ' 00:00:00'
+                },
+                {
+                  columnA: 'Наименование:'
+                },
+                {
+                  columnA: 'Коэффициент:',
+                  columnB: 'KT=200'
+                },
+                {
+                  columnA: 'Интервал/канал'
+                }
+              ]
+
+              let interval = new Date()
+              interval.setHours(0, 0, 0, 0) // '00:00:00'
+
+              const otherRecords = new Array(20).fill(1).map((item) => {
+                let incrementedTime = '00:00:00'
+                const m = interval.getMinutes()
+
+                if (m % 30 === 0) incrementedTime = interval.toString().split(' ')[4]
+                interval.setMinutes(interval.getMinutes() + 30)
+
+                item = {
+                  columnA: currentDate + ' ' + incrementedTime
+                }
+
+                return item
+              })
+
+              return [...defaultData, ...otherRecords]
+            }
+
             this.nodes.push({
               id: this.active[0],
               key: this.active[0],
               label: 'Форма отчета' + (this.nodes.length + 1),
               contextMenu: true,
-              level: 'reportForm'
+              level: 'reportForm',
+              isReportFormDownloaded: false,
+              excelTableData: initExcelTableData()
             })
           }
         }
@@ -327,7 +481,6 @@ export default {
       ReportFormContextMenu: [
         {
           label: 'Добавить лист',
-          icon: 'pi pi-copy',
           command: () => {
             console.log('Добавить лист')
 
@@ -352,7 +505,6 @@ export default {
         },
         {
           label: 'Удалить форму',
-          icon: 'pi pi-copy',
           command: () => {
             console.log('Удалить форму')
 
@@ -392,7 +544,6 @@ export default {
             },
             {
               label: 'Текстовое поле',
-              icon: 'pi pi-copy',
               command: () => {
                 console.log('Текстовое поле')
 
@@ -449,7 +600,8 @@ export default {
                     id: newId,
                     label: 'col',
                     appendLabelText: ': время',
-                    level: 'Time'
+                    level: 'Time',
+                    timestamp: getCurrentTime()
                   }
                 })
 
@@ -504,7 +656,7 @@ export default {
   },
 
   mounted() {
-    this.exelTableData = new Array(17).fill({}) // создаем дефолтные данные для таблицы "формы отчета"
+    this.columnLetters = new Array(100).fill(1).map((item, i) => (item = convertDigitToLetter(i))) // генерируем название колонок (как в excel)
 
     // TODO: comment before build
     // ноды для тестирования дерева "панели управления"
@@ -515,6 +667,42 @@ export default {
     //     label: 'Форма отчета1',
     //     contextMenu: true,
     //     level: 'reportForm',
+    //     isReportFormDownloaded: false,
+    //     excelTableData: [
+    //       {
+    //         columnA: 'Дата формирования:'
+    //       },
+    //       {
+    //         columnA: getFormatedDate()
+    //       },
+    //       {
+    //         columnA: getCurrentTime()
+    //       },
+    //       {
+    //         columnA: 'Интервал дат:',
+    //         columnB: dateShift + ' 00:00:00',
+    //         columnC: currentDate + ' 00:00:00'
+    //       },
+    //       {
+    //         columnA: 'Наименование:'
+    //       },
+    //       {
+    //         columnA: 'Коэффициент:',
+    //         columnB: 'KT=200'
+    //       },
+    //       {
+    //         columnA: 'Интервал/канал',
+    //         id: 'interval-channel'
+    //         // columnB: 'Psum',
+    //         // columnC: 'Pa',
+    //         // columnD: 'Pb'
+    //       }
+    //       // {
+    //       //   columnA: '01.05.2019 00:00:00',
+    //       //   columnB: getRandomNumber(0, 100).toFixed(2),
+    //       //   columnC: getRandomNumber(0, 100).toFixed(2)
+    //       // },
+    //     ],
     //     children: [
     //       {
     //         id: 'List-9303b5db0aa99',
@@ -542,14 +730,31 @@ export default {
     //                 isConsiderInvalidValues: false,
     //                 numberOfDecimalPlaces: 3,
     //                 averagValue: 'среднее значение',
-    //                 key: 'AVG-501610ad71758'
+    //                 key: 'AVG-501610ad71758',
+    //                 equipmentLable: 'ЗНВ-ТР-220-2Т',
+    //                 signalLable: 'Ток.Фаза А'
     //               },
     //               {
     //                 appendLabelText: ': время',
     //                 id: 'Time-a46464ff8be27',
     //                 key: 'Time-a46464ff8be27',
     //                 label: 'col2: время',
-    //                 level: 'Time'
+    //                 level: 'Time',
+    //                 timestamp: getCurrentTime()
+    //               },
+    //               {
+    //                 id: 'AVG-501610ad71759',
+    //                 label: 'col3: AVG()',
+    //                 appendLabelText: ': AVG()',
+    //                 level: 'AVG',
+    //                 averagingInterval: 30,
+    //                 averagingIntervalType: 'сек',
+    //                 isConsiderInvalidValues: false,
+    //                 numberOfDecimalPlaces: 3,
+    //                 averagValue: 'среднее значение',
+    //                 key: 'AVG-501610ad71759',
+    //                 equipmentLable: 'ЗНВ-ТР-220-2Т',
+    //                 signalLable: 'Ток.Фаза B'
     //               }
     //             ]
     //           },
@@ -600,6 +805,126 @@ export default {
   },
 
   methods: {
+    downloadReportForm() {
+      this.loading = true
+
+      setTimeout(() => {
+        this.currentElement.isReportFormDownloaded = true
+        this.loading = false
+      }, 2000)
+    },
+
+    saveExcelTable() {
+      this.nodes = updateElementById({
+        array: this.nodes,
+        targetId: this.currentElement.id,
+        newData: this.currentElement
+      })
+
+      this.isExelTableOpen = false
+    },
+
+    setExcelTableData() {
+      console.log('setExcelTableData', this.selectedEntity)
+      let computedTableData = JSON.parse(JSON.stringify(this.currentElement.excelTableData))
+      let interval = new Date()
+      interval.setHours(0, 0, 0, 0) // '00:00:00'
+
+      if (this.selectedEntity) {
+        switch (this.selectedEntity.level) {
+          case 'AVG':
+            computedTableData[this.lastFocusedRowIndex]['column' + this.lastFocusedСolumnName] =
+              this.selectedEntity.signalLable
+
+            for (let index = 7; index < computedTableData.length; index++) {
+              let incrementedTime = '00:00:00'
+              const m = interval.getMinutes()
+
+              if (m % 30 === 0) incrementedTime = interval.toString().split(' ')[4]
+              interval.setMinutes(interval.getMinutes() + 30)
+
+              if (computedTableData[index] && computedTableData[index].columnA) {
+                computedTableData[index] = {
+                  ...computedTableData[index],
+                  ['column' + this.lastFocusedСolumnName]: getRandomNumber(0, 100).toFixed(2)
+                }
+              } else {
+                computedTableData[index] = {
+                  columnA: currentDate + ' ' + incrementedTime,
+                  ['column' + this.lastFocusedСolumnName]: getRandomNumber(0, 100).toFixed(2)
+                }
+              }
+            }
+
+            break
+          case 'Time':
+            computedTableData[this.lastFocusedRowIndex]['column' + this.lastFocusedСolumnName] =
+              this.selectedEntity.timestamp
+            break
+          case 'Text':
+            computedTableData[this.lastFocusedRowIndex]['column' + this.lastFocusedСolumnName] =
+              this.selectedEntity.label
+            break
+
+          default:
+            break
+        }
+
+        this.currentElement.excelTableData = computedTableData
+      }
+      this.selectingTableDisplayValues = false
+    },
+
+    selectFromSelectingTableDisplayValues(node) {
+      console.log('selectFromSelectingTableDisplayValues', node)
+
+      this.selectedEntity = node
+    },
+
+    unselectSelectedEntity(node) {
+      console.log('unselectSelectedEntity', node)
+
+      this.selectedEntity = null
+    },
+
+    showReportFormTree() {
+      console.log('showReportFormTree')
+
+      this.selectingTableDisplayValues = true
+    },
+
+    cellFocus({ cell, rowPos, colPos }) {
+      console.log('cellFocus', cell, rowPos, colPos)
+
+      this.lastFocusedCellId = cell.id
+      this.lastFocusedСolumnName = this.getColumnLetter(colPos)
+      this.lastFocusedRowIndex = rowPos
+      this.isFocused = true
+    },
+
+    getColumnLetter(columnPosition) {
+      return this.columnLetters[columnPosition]
+    },
+
+    cellBlur(e) {
+      setTimeout(() => {
+        this.isFocused = null
+      }, 290)
+    },
+
+    computedColumnWIdth(columnLetter) {
+      switch (columnLetter) {
+        case 'A':
+          return '160px'
+        case 'B':
+          return '160px'
+        case 'C':
+          return '160px'
+        default:
+          return '80px'
+      }
+    },
+
     changeSelectionKeys(data) {
       this.selectedKey = data
     },
@@ -709,7 +1034,8 @@ export default {
   z-index: 9999;
 }
 
-.exel-modal .v-card-actions {
+.exel-modal .v-card-actions,
+.signalAssignmentPanel-modal .v-card-actions {
   margin-bottom: -52px;
   justify-content: flex-end;
 }

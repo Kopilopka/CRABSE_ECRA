@@ -18,7 +18,7 @@
     "roboto-fontface": "*",
     "v-contextmenu": "^3.0.0",
     "vue": "^3.4.21",
-    "vue3-excel-editor": "^1.0.30",
+    "vue3-excel-editor": "https://github.com/ban4ello/vue3-excel-editor-edited",
     "vuetify": "3.5.9",
     "webfontloader": "^1.0.0"
   },
