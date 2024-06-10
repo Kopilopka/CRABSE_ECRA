@@ -41,6 +41,31 @@ export function getElementById({ array, targetId }) {
   }, null)
 }
 
+export function getParentElementById({ array, targetId }) {
+  let parent = null
+
+  function findParent({ array, targetId, possibleParent }) {
+    array.forEach((item) => {
+      if (parent) {
+        return
+      }
+
+      if (item.id === targetId) {
+        parent = possibleParent
+        return
+      }
+
+      if (item.children?.length) {
+        findParent({ array: item.children, targetId, possibleParent: item })
+      }
+    })
+  }
+
+  findParent({ array, targetId })
+
+  return parent
+}
+
 export function addNewChildToElementById({ array, targetId, newChild }) {
   return array.reduce((acc, item) => {
     if (item.id === targetId) {

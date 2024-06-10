@@ -7,6 +7,7 @@
         <Tree
           :value="menuNodes"
           v-model:selectionKeys="localSelectedKey"
+          v-model:expandedKeys="localExpandedKeys"
           selectionMode="single"
           @nodeSelect="(event) => $emit('nodeSelect', event)"
           @nodeUnselect="(event) => $emit('nodeUnselect', event)"
@@ -47,17 +48,23 @@ export default {
     selectedKey: {
       type: Object,
       default: () => {}
+    },
+    expandedKeys: {
+      type: Object,
+      default: () => {}
     }
   },
 
   data() {
     return {
-      localSelectedKey: {}
+      localSelectedKey: {},
+      localExpandedKeys: {}
     }
   },
 
   mounted() {
     this.localSelectedKey = this.selectedKey
+    this.localExpandedKeys = this.expandedKeys
   },
 
   watch: {

@@ -1,6 +1,6 @@
 <template>
   <v-app-bar>
-    <div class="pa-4">
+    <div class="pa-4 flex justify-between w-full">
       <div class="flex gap-4">
         <v-btn
           color="#eee"
@@ -21,6 +21,18 @@
           Отменить
         </v-btn>
       </div>
+      <div
+        v-if="
+          currentElement?.level === 'reportForm' &&
+          currentElement.isReportFormDownloaded !== false &&
+          currentElement.children?.length
+        "
+        class="flex gap-4"
+      >
+        <v-btn color="#eee" size="small" variant="flat" @click="$emit('generateReport')">
+          Сформировать отчёт
+        </v-btn>
+      </div>
     </div>
   </v-app-bar>
 </template>
@@ -33,6 +45,10 @@ export default {
     active: {
       type: Array,
       default: () => []
+    },
+    currentElement: {
+      type: Object,
+      default: () => {}
     }
   }
 }

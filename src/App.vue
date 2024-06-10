@@ -4,6 +4,7 @@
     <ControlPanel
       :menuNodes="nodes"
       :selectedKey="selectedKey"
+      :expandedKeys="expandedKeysTEST"
       @openMainContextMenu="showMainContextMenu"
       @openTreeContextMenu="(event, node) => showContextMenu(event, node)"
       @nodeSelect="onNodeSelect"
@@ -12,7 +13,12 @@
     />
 
     <!-- -------------------------  хэдер  ----------------------------- -->
-    <AppHeader :active="active" @saveForm="saveForm()" />
+    <AppHeader
+      :active="active"
+      :currentElement="currentElement"
+      @saveForm="saveForm()"
+      @generateReport="generateReport()"
+    />
 
     <!-- ---------------------  панель описания и настройки  ------------------------ -->
     <v-main>
@@ -48,15 +54,20 @@
               >
                 Загрузить
               </v-btn>
-              <v-btn
-                color="#eee"
-                size="small"
-                variant="flat"
-                :disabled="currentElement.isReportFormDownloaded === false"
-                @click="isExelTableOpen = true"
-              >
-                Редактировать
-              </v-btn>
+
+              <div class="flex flex-col">
+                <v-btn
+                  color="#eee"
+                  size="small"
+                  variant="flat"
+                  :disabled="currentElement.isReportFormDownloaded === false"
+                  @click="editReportForm()"
+                >
+                  Редактировать
+                </v-btn>
+
+                <span class="text-red"> {{ error }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -191,6 +202,7 @@
     <ContextMenu ref="ReportFormContextMenu" :model="ReportFormContextMenu" />
     <ContextMenu ref="ListContextMenu" :model="ListContextMenu" />
     <ContextMenu ref="TagTableContextMenu" :model="TagTableContextMenu" />
+    <ContextMenu ref="ColumnContextMenu" :model="ColumnContextMenu" />
 
     <!-- ------- Рисунок 7. Панель назначения сигнала для колонки таблицы измерений --------- -->
     <v-dialog v-model="isSignalAssignmentPanelOpen" width="auto">
@@ -241,7 +253,11 @@
         <Tree
           v-model:expandedKeys="selectingTableDisplayValuesExpandedKeys"
           v-model:selectionKeys="signalAssignmentPanelSelectedKey"
-          :value="nodes"
+          :value="
+            currentElement.children[selectedSheet.index].children.filter(
+              (item) => item.level === 'tagTable'
+            )
+          "
           selectionMode="single"
           class="w-full md:w-[30rem]"
           @nodeSelect="selectFromSelectingTableDisplayValues"
@@ -292,24 +308,40 @@
           </div>
         </template>
 
-        <vue-excel-editor
-          v-model="currentElement.excelTableData"
-          width="1200px"
-          @cell-focus="cellFocus"
-          @cell-blur="cellBlur"
-        >
-          <vue-excel-column
-            v-for="(columnLetter, i) in columnLetters"
-            :key="i"
-            :label="columnLetter"
-            :field="'column' + columnLetter"
-            text-align="right"
-            type="string"
-            :width="computedColumnWIdth(columnLetter)"
-          />
-        </vue-excel-editor>
+        <div v-for="(table, i) in currentElement.children" :key="i">
+          <vue-excel-editor
+            v-if="i === selectedSheet.index"
+            v-model="table.excelTableData"
+            @cell-focus="cellFocus"
+            @cell-blur="cellBlur"
+          >
+            <vue-excel-column
+              v-for="(columnLetter, i) in columnLetters"
+              :key="i"
+              :label="columnLetter"
+              :field="'column' + columnLetter"
+              text-align="right"
+              type="string"
+              :width="computedColumnWIdth(columnLetter)"
+            />
+          </vue-excel-editor>
+        </div>
 
         <template v-slot:actions>
+          <div style="width: 150px">
+            <v-select
+              v-model="selectedSheet"
+              density="compact"
+              item-value="index"
+              item-title="title"
+              return-object
+              hide-details
+              :items="
+                currentElement.children.map((item, index) => ({ index: index, title: item.label }))
+              "
+            ></v-select>
+          </div>
+
           <div class="flex gap-2">
             <v-btn
               text="Ok"
@@ -331,6 +363,62 @@
         </template>
       </v-card>
     </v-dialog>
+
+    <!-- ------- Модальное окно "Режима исполнения" --------- -->
+    <v-dialog v-model="showGenerateReportModal" width="800px" height="600px" class="pa-4">
+      <v-card title="Параметры">
+        <template v-slot:text>
+          <div class="h-[100vh]">
+            <div class="col-2">
+              <div class="text-lg">Дата, время</div>
+
+              <v-date-input
+                v-model="reportData.date"
+                prepend-icon="mdi-menu-down"
+                clearable
+                variant="outlined"
+                label="Date input"
+                density="compact"
+                :max="new Date().toISOString()"
+              ></v-date-input>
+            </div>
+
+            <div class="col-2">
+              <div class="text-lg">Период, мин</div>
+
+              <input
+                v-model="reportData.period"
+                type="number"
+                min="0"
+                max="3600"
+                class="outline-1-grey w-full"
+              />
+            </div>
+          </div>
+        </template>
+
+        <template v-slot:actions>
+          <div class="flex gap-2">
+            <v-btn
+              text="Ok"
+              size="small"
+              color="#eee"
+              variant="flat"
+              class="w-[100px]"
+              @click="saveReport()"
+            ></v-btn>
+            <v-btn
+              text="Отмена"
+              size="small"
+              color="#eee"
+              variant="flat"
+              class="w-[100px]"
+              @click="showGenerateReportModal = false"
+            ></v-btn>
+          </div>
+        </template>
+      </v-card>
+    </v-dialog>
   </v-layout>
 </template>
 
@@ -339,6 +427,8 @@ import ContextMenu from 'primevue/contextmenu'
 import Tree from 'primevue/tree'
 import ControlPanel from '@/components/ControlPanel.vue'
 import AppHeader from '@/components/Header.vue'
+import Excel from 'exceljs'
+import { saveAs } from 'file-saver'
 
 import {
   removeElementById,
@@ -347,13 +437,12 @@ import {
   updateElementById,
   getFormatedDate,
   getCurrentTime,
-  getRandomNumber,
+  getParentElementById,
   convertDigitToLetter
 } from '@/utils/helper.js'
 import CONSTANTS from '@/utils/constants.js'
 
 const currentDate = getFormatedDate()
-const dateShift = getFormatedDate(3) // 3 days ago
 
 export default {
   name: 'App',
@@ -367,6 +456,15 @@ export default {
 
   data() {
     return {
+      reportData: {
+        date: new Date(),
+        period: 30
+      },
+      showGenerateReportModal: false,
+      rowPos: null,
+      colPos: null,
+      error: null,
+      selectedSheet: { index: 0, title: 'Лист1' },
       signalAssignmentPanelSelectedKey: {},
       columnLetters: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'],
       selectedEntity: null,
@@ -378,6 +476,7 @@ export default {
       isFocused: false,
       isExelTableOpen: false,
       expandedKeys: {},
+      expandedKeysTEST: {},
       selectingTableDisplayValuesExpandedKeys: {},
       isSignalAssignmentPanelOpen: false,
       averagingIntervalTypes: {
@@ -418,62 +517,13 @@ export default {
             this.active = ['reportForm-level-' + Math.random().toString(16).slice(2)]
             this.selectedKey = { [this.active[0]]: true }
 
-            function initExcelTableData() {
-              const defaultData = [
-                {
-                  columnA: 'Дата формирования:'
-                },
-                {
-                  columnA: currentDate
-                },
-                {
-                  columnA: getCurrentTime()
-                },
-                {
-                  columnA: 'Интервал дат:',
-                  columnB: dateShift + ' 00:00:00',
-                  columnC: currentDate + ' 00:00:00'
-                },
-                {
-                  columnA: 'Наименование:'
-                },
-                {
-                  columnA: 'Коэффициент:',
-                  columnB: 'KT=200'
-                },
-                {
-                  columnA: 'Интервал/канал'
-                }
-              ]
-
-              let interval = new Date()
-              interval.setHours(0, 0, 0, 0) // '00:00:00'
-
-              const otherRecords = new Array(20).fill(1).map((item) => {
-                let incrementedTime = '00:00:00'
-                const m = interval.getMinutes()
-
-                if (m % 30 === 0) incrementedTime = interval.toString().split(' ')[4]
-                interval.setMinutes(interval.getMinutes() + 30)
-
-                item = {
-                  columnA: currentDate + ' ' + incrementedTime
-                }
-
-                return item
-              })
-
-              return [...defaultData, ...otherRecords]
-            }
-
             this.nodes.push({
               id: this.active[0],
               key: this.active[0],
               label: 'Форма отчета' + (this.nodes.length + 1),
               contextMenu: true,
               level: 'reportForm',
-              isReportFormDownloaded: false,
-              excelTableData: initExcelTableData()
+              isReportFormDownloaded: false
             })
           }
         }
@@ -496,7 +546,8 @@ export default {
                 id: newId,
                 contextMenu: true,
                 label: 'Лист',
-                level: 'list'
+                level: 'list',
+                excelTableData: this.initExcelTableData()
               }
             })
 
@@ -651,12 +702,25 @@ export default {
             })
           }
         }
+      ],
+      ColumnContextMenu: [
+        {
+          label: 'Удалить',
+          command: () => {
+            console.log('Удалить колонку', this.selectedId)
+
+            this.nodes = removeElementById({
+              array: this.nodes,
+              targetId: this.selectedId
+            })
+          }
+        }
       ]
     }
   },
 
   mounted() {
-    this.columnLetters = new Array(100).fill(1).map((item, i) => (item = convertDigitToLetter(i))) // генерируем название колонок (как в excel)
+    this.columnLetters = new Array(10).fill(1).map((item, i) => (item = convertDigitToLetter(i))) // генерируем название колонок (как в excel)
 
     // TODO: comment before build
     // ноды для тестирования дерева "панели управления"
@@ -668,47 +732,13 @@ export default {
     //     contextMenu: true,
     //     level: 'reportForm',
     //     isReportFormDownloaded: false,
-    //     excelTableData: [
-    //       {
-    //         columnA: 'Дата формирования:'
-    //       },
-    //       {
-    //         columnA: getFormatedDate()
-    //       },
-    //       {
-    //         columnA: getCurrentTime()
-    //       },
-    //       {
-    //         columnA: 'Интервал дат:',
-    //         columnB: dateShift + ' 00:00:00',
-    //         columnC: currentDate + ' 00:00:00'
-    //       },
-    //       {
-    //         columnA: 'Наименование:'
-    //       },
-    //       {
-    //         columnA: 'Коэффициент:',
-    //         columnB: 'KT=200'
-    //       },
-    //       {
-    //         columnA: 'Интервал/канал',
-    //         id: 'interval-channel'
-    //         // columnB: 'Psum',
-    //         // columnC: 'Pa',
-    //         // columnD: 'Pb'
-    //       }
-    //       // {
-    //       //   columnA: '01.05.2019 00:00:00',
-    //       //   columnB: getRandomNumber(0, 100).toFixed(2),
-    //       //   columnC: getRandomNumber(0, 100).toFixed(2)
-    //       // },
-    //     ],
     //     children: [
     //       {
     //         id: 'List-9303b5db0aa99',
     //         key: 'List-9303b5db0aa99',
     //         label: 'Лист1',
     //         level: 'list',
+    //         excelTableData: this.initExcelTableData(),
     //         children: [
     //           {
     //             id: 'TagTable-95ad1cc45c2d9',
@@ -759,9 +789,170 @@ export default {
     //             ]
     //           },
     //           {
+    //             id: 'TagTable-95ad1cc45c2d2',
+    //             contextMenu: true,
+    //             label: 'TagTable2',
+    //             averagingInterval: 30,
+    //             averagingIntervalType: 'сек',
+    //             isConsiderInvalidValues: false,
+    //             level: 'tagTable',
+    //             key: 'TagTable-95ad1cc45c2d2',
+    //             children: [
+    //               {
+    //                 id: 'AVG-501610ad71752',
+    //                 label: 'col1: AVG()',
+    //                 appendLabelText: ': AVG()',
+    //                 level: 'AVG',
+    //                 averagingInterval: 30,
+    //                 averagingIntervalType: 'сек',
+    //                 isConsiderInvalidValues: false,
+    //                 numberOfDecimalPlaces: 3,
+    //                 averagValue: 'среднее значение',
+    //                 key: 'AVG-501610ad71752',
+    //                 equipmentLable: 'ЗНВ-ТР-220-2Т',
+    //                 signalLable: 'Ток.Фаза C'
+    //               },
+    //               {
+    //                 appendLabelText: ': время',
+    //                 id: 'Time-a46464ff8be22',
+    //                 key: 'Time-a46464ff8be22',
+    //                 label: 'col2: время',
+    //                 level: 'Time',
+    //                 timestamp: getCurrentTime()
+    //               },
+    //               {
+    //                 id: 'AVG-501610ad71753',
+    //                 label: 'col3: AVG()',
+    //                 appendLabelText: ': AVG()',
+    //                 level: 'AVG',
+    //                 averagingInterval: 30,
+    //                 averagingIntervalType: 'сек',
+    //                 isConsiderInvalidValues: false,
+    //                 numberOfDecimalPlaces: 3,
+    //                 averagValue: 'среднее значение',
+    //                 key: 'AVG-501610ad71753',
+    //                 equipmentLable: 'ЗНВ-ТР-220-2Т',
+    //                 signalLable: 'Ток.Фаза D'
+    //               }
+    //             ]
+    //           },
+    //           {
     //             id: 'Text-596dc8ed7ca69',
     //             key: 'Text-596dc8ed7ca69',
-    //             label: 'Text2',
+    //             label: 'Text3',
+    //             level: 'Text',
+    //             role: 'Период отчета',
+    //             contextMenu: true
+    //           }
+    //         ]
+    //       },
+    //       {
+    //         id: 'List-9303b5db0aa92',
+    //         key: 'List-9303b5db0aa92',
+    //         label: 'Лист2',
+    //         level: 'list',
+    //         excelTableData: this.initExcelTableData(),
+    //         children: [
+    //           {
+    //             id: 'TagTable-95ad1cc45c2d1',
+    //             contextMenu: true,
+    //             label: 'TagTable1',
+    //             averagingInterval: 30,
+    //             averagingIntervalType: 'сек',
+    //             isConsiderInvalidValues: false,
+    //             level: 'tagTable',
+    //             key: 'TagTable-95ad1cc45c2d1',
+    //             children: [
+    //               {
+    //                 id: 'AVG-501610ad71751',
+    //                 label: 'col1: AVG()',
+    //                 appendLabelText: ': AVG()',
+    //                 level: 'AVG',
+    //                 averagingInterval: 30,
+    //                 averagingIntervalType: 'сек',
+    //                 isConsiderInvalidValues: false,
+    //                 numberOfDecimalPlaces: 3,
+    //                 averagValue: 'среднее значение',
+    //                 key: 'AVG-501610ad71751',
+    //                 equipmentLable: 'ЗНВ-ТР-220-2Т',
+    //                 signalLable: 'Ток.Фаза А'
+    //               },
+    //               {
+    //                 appendLabelText: ': время',
+    //                 id: 'Time-a46464ff8be21',
+    //                 key: 'Time-a46464ff8be21',
+    //                 label: 'col2: время',
+    //                 level: 'Time',
+    //                 timestamp: getCurrentTime()
+    //               },
+    //               {
+    //                 id: 'AVG-501610ad71745',
+    //                 label: 'col3: AVG()',
+    //                 appendLabelText: ': AVG()',
+    //                 level: 'AVG',
+    //                 averagingInterval: 30,
+    //                 averagingIntervalType: 'сек',
+    //                 isConsiderInvalidValues: false,
+    //                 numberOfDecimalPlaces: 3,
+    //                 averagValue: 'среднее значение',
+    //                 key: 'AVG-501610ad71745',
+    //                 equipmentLable: 'ЗНВ-ТР-220-2Т',
+    //                 signalLable: 'Ток.Фаза B'
+    //               }
+    //             ]
+    //           },
+    //           {
+    //             id: 'TagTable-95ad1cc45c222',
+    //             contextMenu: true,
+    //             label: 'TagTable2',
+    //             averagingInterval: 30,
+    //             averagingIntervalType: 'сек',
+    //             isConsiderInvalidValues: false,
+    //             level: 'tagTable',
+    //             key: 'TagTable-95ad1cc45c222',
+    //             children: [
+    //               {
+    //                 id: 'AVG-501610ad71722',
+    //                 label: 'col1: AVG()',
+    //                 appendLabelText: ': AVG()',
+    //                 level: 'AVG',
+    //                 averagingInterval: 30,
+    //                 averagingIntervalType: 'сек',
+    //                 isConsiderInvalidValues: false,
+    //                 numberOfDecimalPlaces: 3,
+    //                 averagValue: 'среднее значение',
+    //                 key: 'AVG-501610ad71722',
+    //                 equipmentLable: 'ЗНВ-ТР-220-2Т',
+    //                 signalLable: 'Ток.Фаза C'
+    //               },
+    //               {
+    //                 appendLabelText: ': время',
+    //                 id: 'Time-a46464ff8be23',
+    //                 key: 'Time-a46464ff8be23',
+    //                 label: 'col2: время',
+    //                 level: 'Time',
+    //                 timestamp: getCurrentTime()
+    //               },
+    //               {
+    //                 id: 'AVG-501610ad71754',
+    //                 label: 'col3: AVG()',
+    //                 appendLabelText: ': AVG()',
+    //                 level: 'AVG',
+    //                 averagingInterval: 30,
+    //                 averagingIntervalType: 'сек',
+    //                 isConsiderInvalidValues: false,
+    //                 numberOfDecimalPlaces: 3,
+    //                 averagValue: 'среднее значение',
+    //                 key: 'AVG-501610ad71754',
+    //                 equipmentLable: 'ЗНВ-ТР-220-2Т',
+    //                 signalLable: 'Ток.Фаза D'
+    //               }
+    //             ]
+    //           },
+    //           {
+    //             id: 'Text-596dc8ed7ca64',
+    //             key: 'Text-596dc8ed7ca64',
+    //             label: 'Text3',
     //             level: 'Text',
     //             role: 'Период отчета',
     //             contextMenu: true
@@ -771,6 +962,7 @@ export default {
     //     ]
     //   }
     // ]
+    // this.expandAll()
   },
 
   watch: {
@@ -805,6 +997,102 @@ export default {
   },
 
   methods: {
+    saveReport() {
+      console.log('saveReport')
+
+      const sheets = this.currentElement.children.map((item) => ({
+        label: item.label,
+        table: item.excelTableData
+      }))
+
+      const workbook = new Excel.Workbook()
+      sheets.forEach((sheet) => {
+        const worksheet = workbook.addWorksheet(sheet.label)
+
+        sheet.table.forEach((sheetRow, i) => {
+          if (i === 0) {
+            worksheet.columns = Object.keys(sheetRow).map((key) => {
+              if (key.match('column')) {
+                return { header: sheetRow[key], key }
+              } else {
+                return { header: '', key }
+              }
+            })
+          } else {
+            // eslint-disable-next-line no-unused-vars
+            const { $id, ...otherFields } = sheetRow
+            worksheet.addRow(otherFields)
+          }
+        })
+      })
+
+      workbook.xlsx
+        .writeBuffer()
+        .then((buffer) =>
+          saveAs(
+            new Blob([buffer]),
+            `${this.currentElement.label}-${this.reportData.date.toISOString()}.xlsx`
+          )
+        )
+        .catch((err) => console.log('Error writing excel export', err))
+
+      this.showGenerateReportModal = false
+    },
+
+    expandAll() {
+      for (let node of this.nodes) {
+        this.expandNode(node)
+      }
+
+      this.expandedKeysTEST = { ...this.expandedKeysTEST }
+    },
+
+    expandNode(node) {
+      if (node.children && node.children.length) {
+        this.expandedKeysTEST[node.key] = true
+
+        for (let child of node.children) {
+          this.expandNode(child)
+        }
+      }
+    },
+    editReportForm() {
+      if (this.currentElement.children?.length) {
+        this.isExelTableOpen = true
+      } else {
+        this.setError('Добавьте листы в форму отчёта')
+      }
+    },
+
+    setError(errorText) {
+      this.error = errorText
+
+      setTimeout(() => {
+        this.error = null
+      }, 2000)
+    },
+
+    initExcelTableData() {
+      let defaultData = [{}]
+      let preData = ['Дата формирования:', currentDate, getCurrentTime()]
+
+      this.columnLetters.forEach((item, i) => {
+        if (!preData[i]) {
+          defaultData[0]['column' + item] = ''
+        } else {
+          defaultData[0]['column' + item] = preData[i]
+        }
+      })
+
+      const otherRecords = new Array(21).fill(1).map((item) => {
+        item = {}
+
+        return item
+      })
+
+      return [...defaultData, ...otherRecords]
+    },
+
     downloadReportForm() {
       this.loading = true
 
@@ -826,52 +1114,35 @@ export default {
 
     setExcelTableData() {
       console.log('setExcelTableData', this.selectedEntity)
-      let computedTableData = JSON.parse(JSON.stringify(this.currentElement.excelTableData))
-      let interval = new Date()
-      interval.setHours(0, 0, 0, 0) // '00:00:00'
 
-      if (this.selectedEntity) {
-        switch (this.selectedEntity.level) {
-          case 'AVG':
-            computedTableData[this.lastFocusedRowIndex]['column' + this.lastFocusedСolumnName] =
-              this.selectedEntity.signalLable
+      if (!this.selectedEntity) return
 
-            for (let index = 7; index < computedTableData.length; index++) {
-              let incrementedTime = '00:00:00'
-              const m = interval.getMinutes()
+      let parentElement = null
+      let computedTableData = JSON.parse(
+        JSON.stringify(this.currentElement.children[this.selectedSheet.index].excelTableData)
+      )
 
-              if (m % 30 === 0) incrementedTime = interval.toString().split(' ')[4]
-              interval.setMinutes(interval.getMinutes() + 30)
-
-              if (computedTableData[index] && computedTableData[index].columnA) {
-                computedTableData[index] = {
-                  ...computedTableData[index],
-                  ['column' + this.lastFocusedСolumnName]: getRandomNumber(0, 100).toFixed(2)
-                }
-              } else {
-                computedTableData[index] = {
-                  columnA: currentDate + ' ' + incrementedTime,
-                  ['column' + this.lastFocusedСolumnName]: getRandomNumber(0, 100).toFixed(2)
-                }
-              }
-            }
-
-            break
-          case 'Time':
-            computedTableData[this.lastFocusedRowIndex]['column' + this.lastFocusedСolumnName] =
-              this.selectedEntity.timestamp
-            break
-          case 'Text':
-            computedTableData[this.lastFocusedRowIndex]['column' + this.lastFocusedСolumnName] =
-              this.selectedEntity.label
-            break
-
-          default:
-            break
-        }
-
-        this.currentElement.excelTableData = computedTableData
+      if (this.selectedEntity.level === 'tagTable') {
+        parentElement = this.selectedEntity
+      } else {
+        parentElement = getParentElementById({
+          array: this.nodes,
+          targetId: this.selectedEntity.id
+        })
       }
+
+      for (let index = 0; index < parentElement.children.length; index++) {
+        computedTableData[this.lastFocusedRowIndex][
+          'column' + convertDigitToLetter(this.colPos + index)
+        ] =
+          parentElement.children[index].level === 'AVG'
+            ? parentElement.children[index].signalLable
+            : parentElement.children[index].level === 'Time'
+              ? parentElement.children[index].timestamp
+              : ''
+      }
+
+      this.currentElement.children[this.selectedSheet.index].excelTableData = computedTableData
       this.selectingTableDisplayValues = false
     },
 
@@ -895,6 +1166,8 @@ export default {
 
     cellFocus({ cell, rowPos, colPos }) {
       console.log('cellFocus', cell, rowPos, colPos)
+      this.rowPos = rowPos
+      this.colPos = colPos
 
       this.lastFocusedCellId = cell.id
       this.lastFocusedСolumnName = this.getColumnLetter(colPos)
@@ -966,6 +1239,11 @@ export default {
       this.isSignalAssignmentPanelOpen = false
     },
 
+    generateReport() {
+      console.log('generateReport')
+      this.showGenerateReportModal = true
+    },
+
     showMainContextMenu(event) {
       this.$refs.MainContextMenu.show(event)
     },
@@ -989,6 +1267,11 @@ export default {
           break
         case 'tagTable':
           this.$refs.TagTableContextMenu.show(event)
+          break
+        case 'AVG':
+        case 'Time':
+        case 'Text':
+          this.$refs.ColumnContextMenu.show(event)
           break
       }
     },
@@ -1034,9 +1317,22 @@ export default {
   z-index: 9999;
 }
 
-.exel-modal .v-card-actions,
+.exel-modal .v-card-actions {
+  margin-bottom: -52px;
+  padding-left: 25px;
+  padding-right: 25px;
+  justify-content: space-between !important;
+}
+
 .signalAssignmentPanel-modal .v-card-actions {
   margin-bottom: -52px;
   justify-content: flex-end;
+}
+
+.col-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  align-items: center;
+  justify-content: space-between;
 }
 </style>
