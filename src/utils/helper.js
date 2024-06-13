@@ -162,8 +162,8 @@ export function getCurrentTime() {
   return currentDate.toTimeString().split(' ')[0]
 }
 
-export function getRandomNumber(min, max) {
-  return Math.random() * (max - min) + min
+export function getRandomNumber(min, max, round = 0) {
+  return (Math.random() * (max - min) + min).toFixed(round)
 }
 
 export function convertDigitToLetter(number) {

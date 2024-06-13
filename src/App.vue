@@ -4,7 +4,7 @@
     <ControlPanel
       :menuNodes="nodes"
       :selectedKey="selectedKey"
-      :expandedKeys="expandedKeysTEST"
+      :expandedKeys="controlPanelExpandedKeys"
       @openMainContextMenu="showMainContextMenu"
       @openTreeContextMenu="(event, node) => showContextMenu(event, node)"
       @nodeSelect="onNodeSelect"
@@ -438,11 +438,14 @@ import {
   getFormatedDate,
   getCurrentTime,
   getParentElementById,
-  convertDigitToLetter
+  convertDigitToLetter,
+  getRandomNumber
 } from '@/utils/helper.js'
 import CONSTANTS from '@/utils/constants.js'
 
 const currentDate = getFormatedDate()
+const maxMinutesInDay = 1440 // мин / сутки
+const checkTimeRegex = /^(?:2[0-3]|[01]?[0-9]):[0-5][0-9]:[0-5][0-9]$/
 
 export default {
   name: 'App',
@@ -466,7 +469,7 @@ export default {
       error: null,
       selectedSheet: { index: 0, title: 'Лист1' },
       signalAssignmentPanelSelectedKey: {},
-      columnLetters: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'],
+      columnLetters: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'],
       selectedEntity: null,
       selectingTableDisplayValues: false,
       loading: false,
@@ -476,7 +479,7 @@ export default {
       isFocused: false,
       isExelTableOpen: false,
       expandedKeys: {},
-      expandedKeysTEST: {},
+      controlPanelExpandedKeys: {},
       selectingTableDisplayValuesExpandedKeys: {},
       isSignalAssignmentPanelOpen: false,
       averagingIntervalTypes: {
@@ -1008,6 +1011,7 @@ export default {
       const workbook = new Excel.Workbook()
       sheets.forEach((sheet) => {
         const worksheet = workbook.addWorksheet(sheet.label)
+        let timeColumnIndex = null
 
         sheet.table.forEach((sheetRow, i) => {
           if (i === 0) {
@@ -1019,9 +1023,40 @@ export default {
               }
             })
           } else {
-            // eslint-disable-next-line no-unused-vars
-            const { $id, ...otherFields } = sheetRow
-            worksheet.addRow(otherFields)
+            if (Object.keys(sheetRow).some((item) => item.match('column'))) {
+              timeColumnIndex = Object.keys(sheetRow).findIndex((el) => {
+                return checkTimeRegex.test(sheetRow[el])
+              })
+
+              // eslint-disable-next-line no-unused-vars
+              const { $id, ...otherFields } = sheetRow
+              worksheet.addRow(otherFields)
+
+              const todaysDate = new Date()
+              const now = new Date()
+              const inputDate = new Date(this.reportData.date)
+              const inputDateIsToday =
+                inputDate.setHours(0, 0, 0, 0) == todaysDate.setHours(0, 0, 0, 0)
+
+              const countOfReport = Math.floor(
+                inputDateIsToday
+                  ? (now.getHours() * 60) / this.reportData.period
+                  : maxMinutesInDay / this.reportData.period
+              )
+
+              for (let index = 0; index < countOfReport; index++) {
+                const fields = Object.keys(sheetRow).reduce((acc, sheet, sheetIndex) => {
+                  if (sheet === '$id') return acc
+                  if (sheetIndex === timeColumnIndex) return acc
+
+                  acc[sheet] = getRandomNumber(10, 100, 1)
+
+                  return acc
+                }, {})
+
+                worksheet.addRow(fields)
+              }
+            }
           }
         })
       })
@@ -1044,18 +1079,19 @@ export default {
         this.expandNode(node)
       }
 
-      this.expandedKeysTEST = { ...this.expandedKeysTEST }
+      this.controlPanelExpandedKeys = { ...this.controlPanelExpandedKeys }
     },
 
     expandNode(node) {
       if (node.children && node.children.length) {
-        this.expandedKeysTEST[node.key] = true
+        this.controlPanelExpandedKeys[node.key] = true
 
         for (let child of node.children) {
           this.expandNode(child)
         }
       }
     },
+
     editReportForm() {
       if (this.currentElement.children?.length) {
         this.isExelTableOpen = true
@@ -1179,7 +1215,7 @@ export default {
       return this.columnLetters[columnPosition]
     },
 
-    cellBlur(e) {
+    cellBlur() {
       setTimeout(() => {
         this.isFocused = null
       }, 290)
