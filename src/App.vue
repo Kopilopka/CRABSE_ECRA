@@ -312,6 +312,7 @@
           <vue-excel-editor
             v-if="i === selectedSheet.index"
             v-model="table.excelTableData"
+            height="600px"
             @cell-focus="cellFocus"
             @cell-blur="cellBlur"
           >
@@ -1023,7 +1024,13 @@ export default {
               }
             })
           } else {
-            if (Object.keys(sheetRow).some((item) => item.match('column'))) {
+            let interval = new Date()
+            interval.setHours(0, 0, 0, 0) // '00:00:00'
+
+            if (
+              Object.keys(sheetRow).some((item) => item.match('column')) &&
+              !Object.keys(sheetRow).every((item) => item === 'columnA' || item === '$id')
+            ) {
               timeColumnIndex = Object.keys(sheetRow).findIndex((el) => {
                 return checkTimeRegex.test(sheetRow[el])
               })
@@ -1040,16 +1047,29 @@ export default {
 
               const countOfReport = Math.floor(
                 inputDateIsToday
-                  ? (now.getHours() * 60) / this.reportData.period
+                  ? (now.getHours() * 60) / this.reportData.period + 2
                   : maxMinutesInDay / this.reportData.period
               )
 
               for (let index = 0; index < countOfReport; index++) {
-                const fields = Object.keys(sheetRow).reduce((acc, sheet, sheetIndex) => {
-                  if (sheet === '$id') return acc
-                  if (sheetIndex === timeColumnIndex) return acc
+                const fields = Object.keys(sheetRow).reduce((acc, column, columnIndex) => {
+                  if (column === '$id') return acc
+                  if (columnIndex === timeColumnIndex) return acc
 
-                  acc[sheet] = getRandomNumber(10, 100, 1)
+                  if (column === 'columnA') {
+                    let incrementedTime = '00:00:00'
+                    const m = interval.getMinutes()
+
+                    if (m % this.reportData.period === 0)
+                      incrementedTime = interval.toString().split(' ')[4]
+                    interval.setMinutes(interval.getMinutes() + this.reportData.period)
+
+                    acc[column] = currentDate + ' ' + incrementedTime
+
+                    return acc
+                  }
+
+                  acc[column] = getRandomNumber(10, 100, 1)
 
                   return acc
                 }, {})
@@ -1120,11 +1140,31 @@ export default {
         }
       })
 
-      const otherRecords = new Array(21).fill(1).map((item) => {
-        item = {}
+      defaultData.push({ columnA: 'Интервал/канал' })
 
-        return item
-      })
+      let interval = new Date()
+      interval.setHours(0, 0, 0, 0) // '00:00:00'
+
+      const otherRecords = new Array(48)
+        .fill(1)
+        .map((item) => {
+          let incrementedTime = '00:00:00'
+          const m = interval.getMinutes()
+
+          if (interval.getTime() > new Date().getTime()) {
+            return
+          }
+
+          if (m % 30 === 0) incrementedTime = interval.toString().split(' ')[4]
+          interval.setMinutes(interval.getMinutes() + 30)
+
+          item = {
+            columnA: currentDate + ' ' + incrementedTime
+          }
+
+          return item
+        })
+        .filter((item) => item)
 
       return [...defaultData, ...otherRecords]
     },
